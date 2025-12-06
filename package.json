@@ -1,0 +1,169 @@
+{
+  "name": "ai-grammar-corrector",
+  "displayName": "AI Grammar Corrector",
+  "description": "AI-powered grammar and spelling correction for Markdown and LaTeX files",
+  "version": "1.0.0",
+  "publisher": "your-publisher-name",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Linters"
+  ],
+  "keywords": [
+    "grammar",
+    "spelling",
+    "correction",
+    "AI",
+    "LLM",
+    "markdown",
+    "latex"
+  ],
+  "activationEvents": [
+    "onLanguage:markdown",
+    "onLanguage:latex",
+    "onLanguage:tex"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "aiGrammarCorrector.checkSelection",
+        "title": "AI Grammar: Check Selected Text"
+      },
+      {
+        "command": "aiGrammarCorrector.checkDocument",
+        "title": "AI Grammar: Check Entire Document"
+      },
+      {
+        "command": "aiGrammarCorrector.clearDiagnostics",
+        "title": "AI Grammar: Clear All Diagnostics"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "aiGrammarCorrector.checkSelection",
+          "when": "editorHasSelection && resourceLangId =~ /markdown|latex|tex/",
+          "group": "1_modification"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "aiGrammarCorrector.checkSelection",
+        "key": "ctrl+shift+g",
+        "mac": "cmd+shift+g",
+        "when": "editorTextFocus && editorHasSelection"
+      }
+    ],
+    "configuration": {
+      "title": "AI Grammar Corrector",
+      "properties": {
+        "aiGrammarCorrector.apiUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1/chat/completions",
+          "description": "The API endpoint URL for the LLM service"
+        },
+        "aiGrammarCorrector.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Your API key for the LLM service"
+        },
+        "aiGrammarCorrector.model": {
+          "type": "string",
+          "default": "gpt-4o-mini",
+          "description": "The model to use for grammar checking"
+        },
+        "aiGrammarCorrector.targetLanguage": {
+          "type": "string",
+          "default": "English",
+          "enum": [
+            "English",
+            "Chinese",
+            "Spanish",
+            "French",
+            "German",
+            "Japanese",
+            "Korean",
+            "Portuguese",
+            "Russian",
+            "Italian",
+            "Auto-detect"
+          ],
+          "description": "Target language for corrections and explanations"
+        },
+        "aiGrammarCorrector.uiLanguage": {
+          "type": "string",
+          "default": "English",
+          "enum": [
+            "English",
+            "Chinese",
+            "Spanish",
+            "French",
+            "German",
+            "Japanese",
+            "Korean",
+            "Portuguese",
+            "Russian",
+            "Italian"
+          ],
+          "description": "Language for UI messages and explanations"
+        },
+        "aiGrammarCorrector.customSystemPrompt": {
+          "type": "string",
+          "default": "",
+          "description": "Custom system prompt to append to the default prompt (leave empty to use default only)"
+        },
+        "aiGrammarCorrector.customUserPrompt": {
+          "type": "string",
+          "default": "",
+          "description": "Custom user prompt template. Use {text} as placeholder for selected text"
+        },
+        "aiGrammarCorrector.maxTokens": {
+          "type": "number",
+          "default": 2000,
+          "description": "Maximum tokens for LLM response"
+        },
+        "aiGrammarCorrector.temperature": {
+          "type": "number",
+          "default": 0.3,
+          "minimum": 0,
+          "maximum": 2,
+          "description": "Temperature for LLM response (lower = more deterministic)"
+        },
+        "aiGrammarCorrector.showExplanations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show explanations for corrections"
+        },
+        "aiGrammarCorrector.enableSuggestions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable style improvement suggestions (yellow highlights)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.54.0",
+    "typescript": "^5.3.2"
+  },
+  "dependencies": {
+    "axios": "^1.6.2"
+  }
+}
