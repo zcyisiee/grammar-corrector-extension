@@ -1,7 +1,8 @@
 # AI Grammar Corrector
 
 给 Markdown/LaTeX 打补丁的 LLM 小插件。初稿由 Claude Opus 4.5 Thinking 写，重要细节由 GPT-5.1-Codex-Max 修好——一冷一热，组合技。
-
+![image](https://raw.githubusercontent.com/zcyisiee/blog-images/main/科研/vscode_picgo_1765036241205.png)
+![image](https://raw.githubusercontent.com/zcyisiee/blog-images/main/科研/vscode_picgo_1765036220547.png)
 ## 它能做什么
 - 抓语法/拼写，顺手给风格建议
 - 中英多语对话，提示词可自定义
