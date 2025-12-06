@@ -3,7 +3,8 @@
   "displayName": "AI Grammar Corrector",
   "description": "AI-powered grammar and spelling correction for Markdown and LaTeX files",
   "version": "1.0.0",
-  "publisher": "your-publisher-name",
+  "publisher": "zcyisiee",
+  "icon": "icon.jpg",
   "engines": {
     "vscode": "^1.85.0"
   },
