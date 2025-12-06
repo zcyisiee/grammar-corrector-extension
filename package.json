@@ -4,6 +4,7 @@
   "description": "AI-powered grammar and spelling correction for Markdown and LaTeX files",
   "version": "1.0.0",
   "publisher": "zcyisiee",
+  "repository": "https://github.com/zcyisiee/grammar-corrector-extension",
   "icon": "icon.jpg",
   "engines": {
     "vscode": "^1.85.0"
