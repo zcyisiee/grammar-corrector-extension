@@ -18,10 +18,15 @@ import {
     suggestionDecorationType
 } from './diagnosticsProvider';
 
+interface CorrectionContext {
+    corrections: CorrectionItem[];
+    selectionOffset: number;
+}
+
 // Global state
 let diagnosticCollection: vscode.DiagnosticCollection;
 let statusBarItem: vscode.StatusBarItem;
-let currentCorrections: Map<string, CorrectionItem[]> = new Map();
+let currentCorrections: Map<string, CorrectionContext> = new Map();
 let hoverProviderRegistration: vscode.Disposable | undefined;
 let codeActionProviderRegistration: vscode.Disposable | undefined;
 
@@ -144,6 +149,7 @@ async function checkSelection(): Promise<void> {
     }
 
     const selectedText = editor.document.getText(selection);
+    const selectionOffset = editor.document.offsetAt(selection.start);
     
     // Show progress
     showStatus(getUIMessage('checking', config.uiLanguage), 0);
@@ -181,15 +187,25 @@ async function checkSelection(): Promise<void> {
             return;
         }
 
+        // Enrich corrections with absolute positions
+        const enrichedCorrections = result.corrections.map(correction => ({
+            ...correction,
+            absoluteStart: selectionOffset + correction.startIndex,
+            absoluteEnd: selectionOffset + correction.endIndex
+        }));
+
         // Store corrections
         const documentUri = editor.document.uri.toString();
-        currentCorrections.set(documentUri, result.corrections);
+        currentCorrections.set(documentUri, {
+            corrections: enrichedCorrections,
+            selectionOffset
+        });
 
         // Create diagnostics
         createDiagnostics(
             editor.document,
-            result.corrections,
-            selection.start,
+            enrichedCorrections,
+            selectionOffset,
             diagnosticCollection,
             config.uiLanguage,
             config.enableSuggestions
@@ -198,8 +214,8 @@ async function checkSelection(): Promise<void> {
         // Apply decorations
         applyDecorations(
             editor,
-            result.corrections,
-            selection.start,
+            enrichedCorrections,
+            selectionOffset,
             config.enableSuggestions
         );
 
@@ -275,26 +291,62 @@ function clearDiagnostics(): void {
  * Reject a correction (remove diagnostic without applying)
  */
 function rejectCorrection(uri: vscode.Uri, range: vscode.Range): void {
-    const diagnostics = diagnosticCollection.get(uri);
-    if (!diagnostics) return;
+    const document = vscode.workspace.textDocuments.find(
+        doc => doc.uri.toString() === uri.toString()
+    );
+    const context = currentCorrections.get(uri.toString());
 
-    const newDiagnostics = diagnostics.filter(d => !d.range.isEqual(range));
-    diagnosticCollection.set(uri, newDiagnostics);
+    if (!document || !context) {
+        return;
+    }
 
-    // Update decorations
+    const filteredCorrections = context.corrections.filter(correction => {
+        const startPos = document.positionAt(
+            correction.absoluteStart ?? context.selectionOffset + correction.startIndex
+        );
+        const endPos = document.positionAt(
+            correction.absoluteEnd ?? context.selectionOffset + correction.endIndex
+        );
+        const correctionRange = new vscode.Range(startPos, endPos);
+        return !correctionRange.isEqual(range);
+    });
+
+    if (filteredCorrections.length === 0) {
+        diagnosticCollection.delete(uri);
+        clearCorrectionData(uri.toString());
+        currentCorrections.delete(uri.toString());
+
+        const editor = vscode.window.activeTextEditor;
+        if (editor && editor.document.uri.toString() === uri.toString()) {
+            clearDecorations(editor);
+        }
+        return;
+    }
+
+    const config = getConfig();
+    createDiagnostics(
+        document,
+        filteredCorrections,
+        context.selectionOffset,
+        diagnosticCollection,
+        config.uiLanguage,
+        config.enableSuggestions
+    );
+
     const editor = vscode.window.activeTextEditor;
     if (editor && editor.document.uri.toString() === uri.toString()) {
-        const corrections = currentCorrections.get(uri.toString());
-        if (corrections) {
-            // Remove the rejected correction
-            const updatedCorrections = corrections.filter(c => {
-                const startOffset = editor.document.offsetAt(range.start);
-                const correctionStart = c.startIndex;
-                return startOffset !== correctionStart;
-            });
-            currentCorrections.set(uri.toString(), updatedCorrections);
-        }
+        applyDecorations(
+            editor,
+            filteredCorrections,
+            context.selectionOffset,
+            config.enableSuggestions
+        );
     }
+
+    currentCorrections.set(uri.toString(), {
+        corrections: filteredCorrections,
+        selectionOffset: context.selectionOffset
+    });
 }
 
 /**
@@ -357,8 +409,65 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument(event => {
             const documentUri = event.document.uri.toString();
-            if (currentCorrections.has(documentUri)) {
-                // Clear diagnostics when document changes
+            const context = currentCorrections.get(documentUri);
+            if (!context) {
+                return;
+            }
+
+            let corrections = context.corrections;
+            let selectionOffset = context.selectionOffset;
+            let hasChanges = false;
+
+            for (const change of event.contentChanges) {
+                const changeStart = typeof change.rangeOffset === 'number'
+                    ? change.rangeOffset
+                    : event.document.offsetAt(change.range.start);
+                const changeEnd = changeStart + change.rangeLength;
+                const delta = change.text.length - change.rangeLength;
+
+                const updatedCorrections: CorrectionItem[] = [];
+
+                for (const correction of corrections) {
+                    const absoluteStart = correction.absoluteStart ?? selectionOffset + correction.startIndex;
+                    const absoluteEnd = correction.absoluteEnd ?? selectionOffset + correction.endIndex;
+
+                    // If the change overlaps this correction, drop it
+                    if (!(changeEnd <= absoluteStart || changeStart >= absoluteEnd)) {
+                        hasChanges = true;
+                        continue;
+                    }
+
+                    // Shift corrections that appear after the change
+                    if (absoluteStart >= changeEnd && delta !== 0) {
+                        const shiftedStart = absoluteStart + delta;
+                        const shiftedEnd = absoluteEnd + delta;
+                        updatedCorrections.push({
+                            ...correction,
+                            absoluteStart: shiftedStart,
+                            absoluteEnd: shiftedEnd,
+                            startIndex: correction.startIndex + delta,
+                            endIndex: correction.endIndex + delta
+                        });
+                        hasChanges = true;
+                    } else {
+                        updatedCorrections.push(correction);
+                    }
+                }
+
+                corrections = updatedCorrections;
+
+                // Keep track of selection offset so future calculations stay aligned
+                if (changeStart < selectionOffset) {
+                    selectionOffset = Math.max(selectionOffset + delta, 0);
+                    hasChanges = true;
+                }
+            }
+
+            if (!hasChanges) {
+                return;
+            }
+
+            if (corrections.length === 0) {
                 diagnosticCollection.delete(event.document.uri);
                 currentCorrections.delete(documentUri);
                 clearCorrectionData(documentUri);
@@ -367,6 +476,29 @@ export function activate(context: vscode.ExtensionContext): void {
                 if (editor && editor.document.uri.toString() === documentUri) {
                     clearDecorations(editor);
                 }
+                return;
+            }
+
+            const config = getConfig();
+            currentCorrections.set(documentUri, { corrections, selectionOffset });
+
+            createDiagnostics(
+                event.document,
+                corrections,
+                selectionOffset,
+                diagnosticCollection,
+                config.uiLanguage,
+                config.enableSuggestions
+            );
+
+            const editor = vscode.window.activeTextEditor;
+            if (editor && editor.document.uri.toString() === documentUri) {
+                applyDecorations(
+                    editor,
+                    corrections,
+                    selectionOffset,
+                    config.enableSuggestions
+                );
             }
         })
     );
@@ -376,11 +508,15 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.window.onDidChangeActiveTextEditor(editor => {
             if (editor) {
                 const documentUri = editor.document.uri.toString();
-                const corrections = currentCorrections.get(documentUri);
-                if (corrections) {
-                    // Re-apply decorations for this editor
-                    // Note: This is a simplified approach
-                    // In practice, we'd need to track the original selection
+                const context = currentCorrections.get(documentUri);
+                if (context) {
+                    const config = getConfig();
+                    applyDecorations(
+                        editor,
+                        context.corrections,
+                        context.selectionOffset,
+                        config.enableSuggestions
+                    );
                 }
             }
         })

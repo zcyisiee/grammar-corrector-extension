@@ -15,6 +15,10 @@ export interface CorrectionItem {
     startIndex: number;
     /** End position in the original text */
     endIndex: number;
+    /** Absolute start offset within the VS Code document (filled at runtime) */
+    absoluteStart?: number;
+    /** Absolute end offset within the VS Code document (filled at runtime) */
+    absoluteEnd?: number;
 }
 
 export interface CorrectionResponse {

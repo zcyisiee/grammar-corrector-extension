@@ -171,8 +171,11 @@ export class LLMService {
                 continue;
             }
 
+            const suggestions = correction.suggestions ?? [];
+
             // Find the position of the original text
             let startIndex = -1;
+            let matchedText = correction.original;
             let searchStart = 0;
 
             // Try to find a non-overlapping match
@@ -189,7 +192,6 @@ export class LLMService {
 
                 if (!overlaps) {
                     startIndex = index;
-                    usedRanges.push({ start: startIndex, end: endIndex });
                     break;
                 }
 
@@ -201,19 +203,36 @@ export class LLMService {
                 const fuzzyResult = this.fuzzyFindPosition(correction.original, originalText, usedRanges);
                 if (fuzzyResult) {
                     startIndex = fuzzyResult.start;
-                    usedRanges.push({ start: fuzzyResult.start, end: fuzzyResult.end });
-                    correction.original = fuzzyResult.matchedText;
+                    matchedText = fuzzyResult.matchedText;
                 }
             }
 
             if (startIndex !== -1) {
+                const refined = this.refineRange(
+                    matchedText,
+                    suggestions,
+                    startIndex
+                );
+                const finalStart = refined.startIndex;
+                const finalEnd = refined.endIndex;
+                const updatedSuggestions = refined.suggestions ?? suggestions;
+                const currentText = originalText.slice(finalStart, finalEnd);
+
+                // Skip if suggestion is identical to the current text
+                if (!updatedSuggestions.some(s => s !== currentText)) {
+                    continue;
+                }
+
+                // Reserve the range to avoid overlaps for next corrections
+                usedRanges.push({ start: finalStart, end: finalEnd });
+
                 validCorrections.push({
-                    original: correction.original,
-                    suggestions: correction.suggestions,
+                    original: currentText,
+                    suggestions: updatedSuggestions,
                     type: correction.type === 'suggestion' ? 'suggestion' : 'error',
                     explanation: correction.explanation || '',
-                    startIndex: startIndex,
-                    endIndex: startIndex + correction.original.length
+                    startIndex: finalStart,
+                    endIndex: finalEnd
                 });
             }
         }
@@ -258,6 +277,84 @@ export class LLMService {
         }
         
         return null;
+    }
+
+    /**
+     * Shrink the correction range to the minimal differing span between original and suggestion
+     */
+    private refineRange(
+        matchedText: string,
+        suggestions: string[],
+        startIndex: number
+    ): { startIndex: number; endIndex: number; suggestions: string[] } {
+        if (!suggestions.length || matchedText === suggestions[0]) {
+            return {
+                startIndex,
+                endIndex: startIndex + matchedText.length,
+                suggestions
+            };
+        }
+
+        const primary = suggestions[0];
+        const prefixLen = this.commonPrefixLength(matchedText, primary);
+        const suffixLen = this.commonSuffixLength(
+            matchedText.slice(prefixLen),
+            primary.slice(prefixLen)
+        );
+
+        const trimmedOriginal = matchedText.slice(
+            prefixLen,
+            matchedText.length - suffixLen
+        );
+
+        // If nothing left after trimming, keep the original span to avoid zero-length ranges
+        if (trimmedOriginal.length === 0) {
+            return {
+                startIndex,
+                endIndex: startIndex + matchedText.length,
+                suggestions
+            };
+        }
+
+        const refinedStart = startIndex + prefixLen;
+        const refinedEnd = refinedStart + trimmedOriginal.length;
+
+        const refinedSuggestions = suggestions.map(suggestion => {
+            if (suggestion.length < prefixLen + suffixLen) {
+                return suggestion;
+            }
+
+            const inner = suggestion.slice(
+                prefixLen,
+                suggestion.length - suffixLen
+            );
+
+            return inner.length > 0 ? inner : suggestion;
+        });
+
+        return {
+            startIndex: refinedStart,
+            endIndex: refinedEnd,
+            suggestions: refinedSuggestions
+        };
+    }
+
+    private commonPrefixLength(a: string, b: string): number {
+        const max = Math.min(a.length, b.length);
+        let i = 0;
+        while (i < max && a[i] === b[i]) {
+            i++;
+        }
+        return i;
+    }
+
+    private commonSuffixLength(a: string, b: string): number {
+        const max = Math.min(a.length, b.length);
+        let i = 0;
+        while (i < max && a[a.length - 1 - i] === b[b.length - 1 - i]) {
+            i++;
+        }
+        return i;
     }
 
     /**

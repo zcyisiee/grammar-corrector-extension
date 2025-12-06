@@ -26,7 +26,7 @@ function getDiagnosticKey(range: vscode.Range): string {
 export function createDiagnostics(
     document: vscode.TextDocument,
     corrections: CorrectionItem[],
-    selectionStart: vscode.Position,
+    selectionOffset: number,
     diagnosticCollection: vscode.DiagnosticCollection,
     uiLanguage: string,
     enableSuggestions: boolean
@@ -45,8 +45,12 @@ export function createDiagnostics(
         }
 
         // Calculate the range in the document
-        const startOffset = document.offsetAt(selectionStart) + correction.startIndex;
-        const endOffset = document.offsetAt(selectionStart) + correction.endIndex;
+        const startOffset = typeof correction.absoluteStart === 'number'
+            ? correction.absoluteStart
+            : selectionOffset + correction.startIndex;
+        const endOffset = typeof correction.absoluteEnd === 'number'
+            ? correction.absoluteEnd
+            : selectionOffset + correction.endIndex;
         
         const startPos = document.positionAt(startOffset);
         const endPos = document.positionAt(endOffset);
@@ -277,7 +281,7 @@ export const suggestionDecorationType = vscode.window.createTextEditorDecoration
 export function applyDecorations(
     editor: vscode.TextEditor,
     corrections: CorrectionItem[],
-    selectionStart: vscode.Position,
+    selectionOffset: number,
     enableSuggestions: boolean
 ): void {
     const document = editor.document;
@@ -290,8 +294,12 @@ export function applyDecorations(
             continue;
         }
 
-        const startOffset = document.offsetAt(selectionStart) + correction.startIndex;
-        const endOffset = document.offsetAt(selectionStart) + correction.endIndex;
+        const startOffset = typeof correction.absoluteStart === 'number'
+            ? correction.absoluteStart
+            : selectionOffset + correction.startIndex;
+        const endOffset = typeof correction.absoluteEnd === 'number'
+            ? correction.absoluteEnd
+            : selectionOffset + correction.endIndex;
         
         const startPos = document.positionAt(startOffset);
         const endPos = document.positionAt(endOffset);
