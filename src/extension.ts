@@ -22,16 +22,29 @@ import {
 let diagnosticCollection: vscode.DiagnosticCollection;
 let statusBarItem: vscode.StatusBarItem;
 let currentCorrections: Map<string, CorrectionItem[]> = new Map();
+let hoverProviderRegistration: vscode.Disposable | undefined;
+let codeActionProviderRegistration: vscode.Disposable | undefined;
 
 /**
  * Get extension configuration
  */
 function getConfig(): ExtensionConfig {
     const config = vscode.workspace.getConfiguration('aiGrammarCorrector');
+    
+    // Support flexible naming for model/apiUrl so users can set model_name/url aliases
+    const modelName = config.get<string>('modelName') || config.get<string>('model_name');
+    const resolvedModel = modelName || config.get<string>('model') || 'gpt-4o-mini';
+
+    const apiUrlSetting = config.get<string>('apiUrl');
+    const apiUrlAlias = config.get<string>('url');
+    const resolvedApiUrl = (apiUrlSetting && apiUrlSetting.trim())
+        || (apiUrlAlias && apiUrlAlias.trim())
+        || 'https://api.openai.com/v1/chat/completions';
+
     return {
-        apiUrl: config.get('apiUrl', 'https://api.openai.com/v1/chat/completions'),
+        apiUrl: resolvedApiUrl,
         apiKey: config.get('apiKey', ''),
-        model: config.get('model', 'gpt-4o-mini'),
+        model: resolvedModel,
         maxTokens: config.get('maxTokens', 2000),
         temperature: config.get('temperature', 0.3),
         targetLanguage: config.get('targetLanguage', 'English'),
@@ -41,6 +54,47 @@ function getConfig(): ExtensionConfig {
         showExplanations: config.get('showExplanations', true),
         enableSuggestions: config.get('enableSuggestions', true)
     };
+}
+
+/**
+ * Register hover/code action providers using the latest configuration
+ */
+function registerProviders(context: vscode.ExtensionContext, config: ExtensionConfig): void {
+    hoverProviderRegistration?.dispose();
+    codeActionProviderRegistration?.dispose();
+
+    codeActionProviderRegistration = vscode.languages.registerCodeActionsProvider(
+        [
+            { language: 'markdown', scheme: 'file' },
+            { language: 'latex', scheme: 'file' },
+            { language: 'tex', scheme: 'file' }
+        ],
+        new GrammarCodeActionProvider(config.uiLanguage, config.showExplanations),
+        {
+            providedCodeActionKinds: GrammarCodeActionProvider.providedCodeActionKinds
+        }
+    );
+
+    hoverProviderRegistration = vscode.languages.registerHoverProvider(
+        [
+            { language: 'markdown', scheme: 'file' },
+            { language: 'latex', scheme: 'file' },
+            { language: 'tex', scheme: 'file' }
+        ],
+        new GrammarHoverProvider(config.uiLanguage, config.showExplanations)
+    );
+
+    context.subscriptions.push(codeActionProviderRegistration, hoverProviderRegistration);
+}
+
+/**
+ * Quick helper to open extension settings
+ */
+async function openExtensionSettings(): Promise<void> {
+    await vscode.commands.executeCommand(
+        'workbench.action.openSettings', 
+        'aiGrammarCorrector'
+    );
 }
 
 /**
@@ -262,31 +316,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // Get initial config for providers
     const config = getConfig();
-
-    // Register code action provider
-    const codeActionProvider = vscode.languages.registerCodeActionsProvider(
-        [
-            { language: 'markdown', scheme: 'file' },
-            { language: 'latex', scheme: 'file' },
-            { language: 'tex', scheme: 'file' }
-        ],
-        new GrammarCodeActionProvider(config.uiLanguage, config.showExplanations),
-        {
-            providedCodeActionKinds: GrammarCodeActionProvider.providedCodeActionKinds
-        }
-    );
-    context.subscriptions.push(codeActionProvider);
-
-    // Register hover provider
-    const hoverProvider = vscode.languages.registerHoverProvider(
-        [
-            { language: 'markdown', scheme: 'file' },
-            { language: 'latex', scheme: 'file' },
-            { language: 'tex', scheme: 'file' }
-        ],
-        new GrammarHoverProvider(config.uiLanguage, config.showExplanations)
-    );
-    context.subscriptions.push(hoverProvider);
+    registerProviders(context, config);
 
     // Register commands
     context.subscriptions.push(
@@ -314,6 +344,12 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.commands.registerCommand(
             'aiGrammarCorrector.rejectCorrection',
             rejectCorrection
+        )
+    );
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            'aiGrammarCorrector.openSettings',
+            openExtensionSettings
         )
     );
 
@@ -354,8 +390,9 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration(event => {
             if (event.affectsConfiguration('aiGrammarCorrector')) {
-                // Configuration changed, providers will use new config on next call
                 console.log('AI Grammar Corrector configuration changed');
+                const updatedConfig = getConfig();
+                registerProviders(context, updatedConfig);
             }
         })
     );
@@ -367,6 +404,8 @@ export function activate(context: vscode.ExtensionContext): void {
 export function deactivate(): void {
     diagnosticCollection?.dispose();
     statusBarItem?.dispose();
+    hoverProviderRegistration?.dispose();
+    codeActionProviderRegistration?.dispose();
     errorDecorationType?.dispose();
     suggestionDecorationType?.dispose();
 }

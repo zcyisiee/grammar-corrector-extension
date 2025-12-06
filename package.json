@@ -23,7 +23,11 @@
   "activationEvents": [
     "onLanguage:markdown",
     "onLanguage:latex",
-    "onLanguage:tex"
+    "onLanguage:tex",
+    "onCommand:aiGrammarCorrector.checkSelection",
+    "onCommand:aiGrammarCorrector.checkDocument",
+    "onCommand:aiGrammarCorrector.clearDiagnostics",
+    "onCommand:aiGrammarCorrector.openSettings"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -39,6 +43,10 @@
       {
         "command": "aiGrammarCorrector.clearDiagnostics",
         "title": "AI Grammar: Clear All Diagnostics"
+      },
+      {
+        "command": "aiGrammarCorrector.openSettings",
+        "title": "AI Grammar: Open Settings"
       }
     ],
     "menus": {
@@ -64,7 +72,12 @@
         "aiGrammarCorrector.apiUrl": {
           "type": "string",
           "default": "https://api.openai.com/v1/chat/completions",
-          "description": "The API endpoint URL for the LLM service"
+          "description": "The API endpoint URL for the LLM service (OpenAI-compatible). Alias: aiGrammarCorrector.url"
+        },
+        "aiGrammarCorrector.url": {
+          "type": "string",
+          "default": "",
+          "description": "Alias for apiUrl (useful if you prefer a shorter setting name)"
         },
         "aiGrammarCorrector.apiKey": {
           "type": "string",
@@ -75,6 +88,11 @@
           "type": "string",
           "default": "gpt-4o-mini",
           "description": "The model to use for grammar checking"
+        },
+        "aiGrammarCorrector.modelName": {
+          "type": "string",
+          "default": "",
+          "description": "Optional alias if your provider expects a model_name or deployment name (overrides Model when set)"
         },
         "aiGrammarCorrector.targetLanguage": {
           "type": "string",

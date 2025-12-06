@@ -71,6 +71,7 @@ Open VS Code Settings (`Ctrl+,`) and search for "AI Grammar Corrector".
 | Setting | Default | Description | 说明 |
 |---------|---------|-------------|------|
 | `model` | `gpt-4o-mini` | LLM model to use | 使用的模型 |
+| `modelName` | `""` | Alias for providers that expect `model_name`/deployment id (overrides `model` when set) | 当服务端需要 `model_name`/部署名称时使用，优先级高于 `model` |
 | `targetLanguage` | `English` | Target language for checking | 检查的目标语言 |
 | `uiLanguage` | `English` | UI language | 界面语言 |
 | `maxTokens` | `2000` | Max tokens for response | 响应最大 token 数 |
@@ -80,6 +81,9 @@ Open VS Code Settings (`Ctrl+,`) and search for "AI Grammar Corrector".
 | `customSystemPrompt` | `""` | Additional system prompt | 附加系统提示词 |
 | `customUserPrompt` | `""` | Custom user prompt | 自定义用户提示词 |
 
+Alias: `aiGrammarCorrector.url` can be used instead of `aiGrammarCorrector.apiUrl`.  
+别名：可以使用 `aiGrammarCorrector.url` 代替 `aiGrammarCorrector.apiUrl`。
+
 ### Example Settings | 示例配置
 
 ```json
@@ -87,6 +91,7 @@ Open VS Code Settings (`Ctrl+,`) and search for "AI Grammar Corrector".
     "aiGrammarCorrector.apiUrl": "https://api.openai.com/v1/chat/completions",
     "aiGrammarCorrector.apiKey": "sk-your-api-key-here",
     "aiGrammarCorrector.model": "gpt-4o-mini",
+    "aiGrammarCorrector.modelName": "",
     "aiGrammarCorrector.targetLanguage": "English",
     "aiGrammarCorrector.uiLanguage": "Chinese",
     "aiGrammarCorrector.showExplanations": true,
@@ -123,7 +128,12 @@ This extension works with any OpenAI-compatible API:
 2. Right-click to open context menu
 3. Select "AI Grammar: Check Selected Text"
 
-### Method 3: Command Palette | 方法三：命令面板
+### Method 3: Quick Settings | 方法三：快速打开配置
+
+1. Press `Ctrl+Shift+P` (or `Cmd+Shift+P`)
+2. Run `AI Grammar: Open Settings` to jump to all extension options (API URL/Key, model, prompts, languages)
+
+### Method 4: Command Palette | 方法四：命令面板
 
 1. Press `Ctrl+Shift+P` (or `Cmd+Shift+P`)
 2. Type "AI Grammar"
